@@ -394,7 +394,7 @@ def make_zone_heatmap(mat: pd.DataFrame, title: str) -> go.Figure:
     z_plot = z[::-1, :]
 
     # Labels
-    x_labels = ["Away", "Middle", "In"]
+    x_labels = ["Left", "Middle", "Right"]
     y_labels = ["High", "Middle", "Low"]
 
     # Text labels in cells
@@ -422,7 +422,7 @@ def make_zone_heatmap(mat: pd.DataFrame, title: str) -> go.Figure:
 
     fig.update_layout(
         title=title,
-        xaxis=dict(title="Horizontal Location"),
+        xaxis=dict(title="Horizontal Location (catcher view: Left = 3B, Right = 1B)"),
         yaxis=dict(title="Vertical Location"),
         margin=dict(l=40, r=40, t=60, b=40),
         plot_bgcolor="black",
