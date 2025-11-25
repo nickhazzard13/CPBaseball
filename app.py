@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from PIL import Image
 
+
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Baseball Dashboard", layout="wide")
 HERE = os.path.dirname(__file__)
@@ -320,6 +321,100 @@ def make_movement_figure(sub: pd.DataFrame, normalize_lhp: bool, throws_hand: st
 
     fig.update_layout(legend_title_text="Pitch", margin=dict(l=10,r=10,t=40,b=10))
     return fig
+def _add_field_geometry(fig: go.Figure):
+    """Draw the same diamond/field you use for the scatter, onto an existing Figure."""
+    diamond_xy = [HOME, FIRST, SECOND, THIRD, HOME]
+    fig.add_trace(go.Scatter(
+        x=[pt[0] for pt in diamond_xy],
+        y=[pt[1] for pt in diamond_xy],
+        mode="lines",
+        line=dict(color="#ffffff", width=3),
+        showlegend=False, hoverinfo="skip",
+    ))
+    base_half = 0.625 / np.sqrt(2)
+    for (bx, by) in (FIRST, SECOND, THIRD):
+        fig.add_shape(
+            type="path", xref="x", yref="y",
+            path=f"M {bx},{by+base_half*2} L {bx+base_half*2},{by} "
+                 f"L {bx},{by-base_half*2} L {bx-base_half*2},{by} Z",
+            line=dict(color="#ffffff", width=2),
+            fillcolor="#ffffff", layer="above"
+        )
+    hp = np.array([
+        [0.0, 0.0],[8.5/12, 0.0],[8.5/12, 8.5/12],
+        [-8.5/12, 8.5/12],[-8.5/12, 0.0],[0.0, 0.0],
+    ])
+    fig.add_trace(go.Scatter(
+        x=hp[:, 0], y=hp[:, 1], mode="lines",
+        line=dict(color="#ffffff", width=3),
+        showlegend=False, hoverinfo="skip"
+    ))
+    far = Y_MAX
+    k = far / np.cos(np.radians(45))
+    for sign in (-1, 1):
+        fig.add_trace(go.Scatter(
+            x=[0, sign * k * np.sin(np.radians(45))],
+            y=[0, k * np.cos(np.radians(45))],
+            mode="lines", line=dict(color="#ffffff", width=2),
+            showlegend=False, hoverinfo="skip"
+        ))
+    fig.add_shape(
+        type="rect", xref="x", yref="y",
+        x0=-1.0, x1=1.0, y0=RUBBER_Y-0.25, y1=RUBBER_Y+0.25,
+        line=dict(color="#ffffff"), fillcolor="#ffffff"
+    )
+    fig.add_shape(
+        type="path", xref="x", yref="y",
+        path=_circle_path(0.0, RUBBER_Y, MOUND_R),
+        line=dict(color="#cfcfcf"),
+        fillcolor="rgba(200,200,200,0.15)"
+    )
+    fig.add_shape(
+        type="rect", xref="x", yref="y",
+        x0=X_MIN, x1=X_MAX, y0=Y_MIN, y1=Y_MAX,
+        layer="below", fillcolor="#4caf50", line=dict(width=0)
+    )
+    return fig
+
+def make_field_heatmap_figure(p: pd.DataFrame, batter_name: str = "Player",
+                              nbins: int = 80, smooth: bool = True):
+    """
+    Heat map of spray (X_ft, Y_ft) over an accurate diamond.
+    Requires columns X_ft and Y_ft already computed.
+    """
+    fig = go.Figure()
+
+    # Heat layer first
+    fig.add_trace(go.Histogram2d(
+        x=p["X_ft"], y=p["Y_ft"],
+        nbinsx=nbins, nbinsy=nbins,
+        colorscale="YlOrRd",
+        zsmooth="best" if smooth else False,
+        showscale=True,
+        colorbar=dict(
+            title="<b>BIP Density</b>",
+            ticks="outside", thickness=18, outlinewidth=0,
+            yanchor="middle", y=0.5
+        ),
+        hovertemplate="LF↔RF: %{x:.0f} ft<br>Depth: %{y:.0f} ft<br>Count: %{z}<extra></extra>",
+    ))
+
+    _add_field_geometry(fig)
+
+    fig.update_xaxes(range=[X_MIN, X_MAX], title_text="Horizontal (ft)  [− = LF, + = RF]",
+                     showgrid=False, zeroline=False)
+    fig.update_yaxes(range=[Y_MIN, Y_MAX], title_text="Depth (ft)  [0 = Home, + = CF]",
+                     scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False)
+
+    fig.update_layout(
+        margin=dict(l=10, r=10, t=60, b=10),
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        title=dict(text=f"{batter_name} : Batting Heat Map",
+                   x=0.5, xanchor="center", font=dict(size=20, color="#222")),
+        showlegend=False
+    )
+    return fig
 
 # ---------------- UI ----------------
 st.title("Baseball Dashboard")
@@ -366,19 +461,17 @@ if section == "Hitter Dashboard":
         c4.metric("Avg LA", f"{la_avg:.1f}°" if len(s_all) and pd.notna(la_avg) else "–")
         c5.metric("Hard-Hit %", f"{100*hh_rate:.0f}%" if len(s_all) else "–")
 
-        chart_type = st.radio("Chart Type", ["Field Overlay", "Polar"], horizontal=True)
+        chart_type = st.radio("Chart Type", ["Field Overlay", "Field Heatmap", "Polar"], horizontal=True, key="hitter_chart_type")
 
         if chart_type == "Field Overlay":
-            fig = make_field_diamond_figure(s_all, batter_name=batter)  # <<—— draw diamond + spray
+            fig = make_field_diamond_figure(s_all, batter_name=batter)
+        elif chart_type == "Field Heatmap":
+            fig = make_field_heatmap_figure(s_all.dropna(subset=["X_ft","Y_ft"]), batter_name=batter)
         else:
             req = s_all.dropna(subset=["Direction","Distance"])
             fig = make_polar_spray_figure(req)
-        st.plotly_chart(fig, use_container_width=True, theme=None)
 
-        st.subheader("Batted Balls (all BIP)")
-        cols = ["Date","Batter","ExitSpeed","Angle","Direction","Distance","PlayResult","X_ft","Y_ft"]
-        show = [c for c in cols if c in s_all.columns]
-        st.dataframe(s_all[show].sort_values("Date", ascending=False), use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, theme=None)
 
     else:
         chosen = st.sidebar.multiselect("Choose up to 12 batters", batters_all, default=batters_all[:10], max_selections=12)
@@ -405,6 +498,7 @@ if section == "Hitter Dashboard":
             st.plotly_chart(fig, use_container_width=True, theme=None)
 
 # ===== PITCHER DASHBOARD =====
+# ===== PITCHER DASHBOARD =====
 else:
     rawp = load_pitchers(team); dpp = prep_pitcher_df(rawp)
     pitchers = sorted(dpp["Pitcher"].unique().tolist())
@@ -417,7 +511,17 @@ else:
     throws = (sub["PitcherThrows"].dropna().iloc[0] if sub["PitcherThrows"].notna().any() else "R").upper()
     normalize = st.sidebar.checkbox("Normalize LHP to RHP frame (+HB = arm-side)", value=True)
 
-    fig = make_movement_figure(sub, normalize_lhp=normalize, throws_hand=throws)
+    # 👇 define plot_style BEFORE you use it
+    plot_style = st.radio("Plot Style", ["Scatter", "Heatmap"], horizontal=True, key="pitch_plot_style")
+
+    if plot_style == "Scatter":
+        fig = make_movement_figure(sub, normalize_lhp=normalize, throws_hand=throws)
+    else:
+        data_for_heat = sub.copy()
+        if normalize and throws.startswith("L"):
+            data_for_heat["HorzBreak"] = -data_for_heat["HorzBreak"]
+        fig = make_movement_heatmap_figure(data_for_heat)
+
     st.subheader(f"Movement Profile — {pitcher}  (Throws: {throws})")
     st.plotly_chart(fig, use_container_width=True, theme=None)
 
@@ -431,3 +535,157 @@ else:
     summary["MPH"] = summary["MPH"].round(1)
     st.subheader("Pitch Mix & Velo")
     st.dataframe(summary, use_container_width=True)
+
+
+
+    # HEAT MAPPPPPPP
+    # ================= HEATMAP HELPERS =================
+    # ================= HEATMAP HELPERS =================
+def _add_field_geometry(fig: go.Figure):
+    """Draw the diamond/field on an existing Figure (no points)."""
+    # (reuses the exact geometry you already use)
+    diamond_xy = [HOME, FIRST, SECOND, THIRD, HOME]
+    fig.add_trace(go.Scatter(
+        x=[pt[0] for pt in diamond_xy],
+        y=[pt[1] for pt in diamond_xy],
+        mode="lines",
+        line=dict(color="#ffffff", width=3),
+        showlegend=False, hoverinfo="skip",
+    ))
+    base_half = 0.625 / np.sqrt(2)
+    for (bx, by) in (FIRST, SECOND, THIRD):
+        fig.add_shape(
+            type="path", xref="x", yref="y",
+            path=f"M {bx},{by+base_half*2} L {bx+base_half*2},{by} "
+                 f"L {bx},{by-base_half*2} L {bx-base_half*2},{by} Z",
+            line=dict(color="#ffffff", width=2),
+            fillcolor="#ffffff", layer="above"
+        )
+    hp = np.array([
+        [0.0, 0.0],[8.5/12, 0.0],[8.5/12, 8.5/12],
+        [-8.5/12, 8.5/12],[-8.5/12, 0.0],[0.0, 0.0],
+    ])
+    fig.add_trace(go.Scatter(
+        x=hp[:, 0], y=hp[:, 1], mode="lines",
+        line=dict(color="#ffffff", width=3),
+        showlegend=False, hoverinfo="skip"
+    ))
+    far = Y_MAX
+    k = far / np.cos(np.radians(45))
+    for sign in (-1, 1):
+        fig.add_trace(go.Scatter(
+            x=[0, sign * k * np.sin(np.radians(45))],
+            y=[0, k * np.cos(np.radians(45))],
+            mode="lines", line=dict(color="#ffffff", width=2),
+            showlegend=False, hoverinfo="skip"
+        ))
+    fig.add_shape(
+        type="rect", xref="x", yref="y",
+        x0=-1.0, x1=1.0, y0=RUBBER_Y-0.25, y1=RUBBER_Y+0.25,
+        line=dict(color="#ffffff"), fillcolor="#ffffff"
+    )
+    fig.add_shape(
+        type="path", xref="x", yref="y",
+        path=_circle_path(0.0, RUBBER_Y, MOUND_R),
+        line=dict(color="#cfcfcf"),
+        fillcolor="rgba(200,200,200,0.15)"
+    )
+    fig.add_shape(
+        type="rect", xref="x", yref="y",
+        x0=X_MIN, x1=X_MAX, y0=Y_MIN, y1=Y_MAX,
+        layer="below", fillcolor="#4caf50", line=dict(width=0)
+    )
+    return fig
+
+def make_field_heatmap_figure(p: pd.DataFrame, batter_name: str = "Player",
+                              nbins: int = 100, clip_quantile: float = 0.98):
+    """
+    Batting spray heat map using a manual 2D histogram so we can
+    make zeros transparent and clip the color scale for contrast.
+    """
+    if p.empty or not {"X_ft","Y_ft"}.issubset(p.columns):
+        return go.Figure().update_layout(title="No XY data")
+
+    x = p["X_ft"].to_numpy()
+    y = p["Y_ft"].to_numpy()
+
+    # Build 2D histogram on the same field bounds
+    H, xedges, yedges = np.histogram2d(
+        x, y,
+        bins=[nbins, nbins],
+        range=[[X_MIN, X_MAX], [Y_MIN, Y_MAX]],
+    )
+
+    # Clip very hot bins so color contrast is better
+    vmax = float(np.nanquantile(H[H > 0], clip_quantile)) if (H > 0).any() else 1.0
+    H = np.minimum(H, vmax)
+
+    # Make zeros transparent (use NaN so Plotly doesn't draw them)
+    H = np.where(H == 0, np.nan, H)
+
+    # Bin centers for plotting
+    xc = 0.5 * (xedges[:-1] + xedges[1:])
+    yc = 0.5 * (yedges[:-1] + yedges[1:])
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Heatmap(
+        x=xc, y=yc, z=H.T,  # transpose so y goes upfield
+        zmin=0, zmax=vmax,
+        colorscale="YlOrRd",
+        hoverongaps=False,
+        colorbar=dict(
+            title="<b>BIP Density</b>",
+            ticks="outside", thickness=18, outlinewidth=0,
+            yanchor="middle", y=0.5
+        ),
+        hovertemplate="LF↔RF: %{x:.0f} ft<br>Depth: %{y:.0f} ft<br>Count: %{z:.0f}<extra></extra>",
+    ))
+
+    _add_field_geometry(fig)  # draw your diamond/grass on top
+
+    fig.update_xaxes(range=[X_MIN, X_MAX], title_text="Horizontal (ft)  [− = LF, + = RF]",
+                     showgrid=False, zeroline=False)
+    fig.update_yaxes(range=[Y_MIN, Y_MAX], title_text="Depth (ft)  [0 = Home, + = CF]",
+                     scaleanchor="x", scaleratio=1, showgrid=False, zeroline=False)
+
+    fig.update_layout(
+        margin=dict(l=10, r=10, t=60, b=10),
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        title=dict(text=f"{batter_name} : Batting Heat Map", x=0.5, xanchor="center",
+                   font=dict(size=20, color="#222")),
+        showlegend=False
+    )
+    return fig
+
+def make_movement_heatmap_figure(sub: pd.DataFrame):
+    """
+    Pitching movement heat map: density of HorzBreak vs InducedVertBreak.
+    Works with the columns you already load (no plate location needed).
+    """
+    # Compute a density heatmap (equal aspect, with guide rings & axes)
+    fig = px.density_heatmap(
+        sub, x="HorzBreak", y="InducedVertBreak",
+        nbinsx=40, nbinsy=40, color_continuous_scale="YlOrRd",
+        labels={"HorzBreak": 'Horizontal Break (")', "InducedVertBreak": 'Induced Vertical Break (")'}
+    )
+    fig.update_traces(hovertemplate='HB: %{x:.1f}"<br>IVB: %{y:.1f}"<br>Count: %{z}<extra></extra>')
+    # Guide rings/axes like your scatter:
+    for r in (12, 24):
+        fig.add_shape(type="circle", xref="x", yref="y",
+                      x0=-r, y0=-r, x1=r, y1=r,
+                      line=dict(color="#cfd8dc", width=1.5))
+    fig.add_shape(type="line", x0=-100, x1=100, y0=0, y1=0,
+                  line=dict(color="#b0bec5", width=1))
+    fig.add_shape(type="line", x0=0, x1=0, y0=-100, y1=100,
+                  line=dict(color="#b0bec5", width=1))
+    # Nice symmetric limits
+    max_abs = float(np.nanmax(np.abs(sub[["HorzBreak", "InducedVertBreak"]])))
+    lim = int(np.ceil(max(24, max_abs + 4) / 6.0) * 6)
+    lim = min(lim, 36)
+    fig.update_xaxes(range=[-lim, lim], tickvals=[-24, -12, 0, 12, 24], constrain="domain")
+    fig.update_yaxes(range=[-lim, lim], tickvals=[-24, -12, 0, 12, 24], scaleanchor="x", scaleratio=1)
+    fig.update_layout(margin=dict(l=10, r=10, t=40, b=10),
+                      coloraxis_colorbar=dict(title="<b>Pitch Density</b>", thickness=18))
+    return fig
