@@ -49,15 +49,6 @@ def load_hitters(team: str) -> pd.DataFrame:
     if "Batter" in df.columns:
         df["Batter"] = df["Batter"].apply(_standardize_name)
 
-        # Optional: explicitly fix / drop known bad spellings
-        # Example: if one row has the last name misspelled:
-        # df["Batter"] = df["Batter"].replace({
-        #     "Gavin Spirdinoff": "Gavin Spiridinoff"
-        # })
-        #
-        # Or if you just want to DROP the bad spelling entirely:
-        # df = df[df["Batter"] != "Gavin Spirdinoff"]
-
     return df
 
 
@@ -431,6 +422,231 @@ def make_zone_heatmap(mat: pd.DataFrame, title: str) -> go.Figure:
     )
     return fig
 
+# ------- NEW: shared helpers for pitch types, count labels, and zone scatter -------
+
+def standardize_pitch_type(df: pd.DataFrame,
+                           source_col: str = "AutoPitchType",
+                           target_col: str = "PitchTypeDisplay") -> pd.DataFrame:
+    """
+    Map any unknown pitch types into 'Other' so they still get a color.
+    """
+    out = df.copy()
+    if source_col not in out.columns:
+        out[target_col] = "Other"
+        return out
+    out[target_col] = out[source_col].astype(str)
+    valid = set(PITCH_COLORS.keys())
+    mask = ~out[target_col].isin(valid)
+    out.loc[mask, target_col] = "Other"
+    return out
+
+def add_count_label(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add a 'CountStr' column like '0-0', '1-2' from Balls/Strikes, when available.
+    """
+    out = df.copy()
+    if {"Balls", "Strikes"}.issubset(out.columns):
+        out["Balls"] = pd.to_numeric(out["Balls"], errors="coerce")
+        out["Strikes"] = pd.to_numeric(out["Strikes"], errors="coerce")
+        mask = out["Balls"].notna() & out["Strikes"].notna()
+        out.loc[mask, "CountStr"] = (
+            out.loc[mask, "Balls"].astype(int).astype(str)
+            + "-"
+            + out.loc[mask, "Strikes"].astype(int).astype(str)
+        )
+    else:
+        out["CountStr"] = np.nan
+    return out
+
+def add_zone_grid_to_fig(
+    fig: go.Figure,
+    side_bounds=(-0.85, 0.85),
+    height_bounds=(1.5, 3.5),
+    side_cut=0.3,
+    low_cut=2.3,
+    high_cut=3.1,
+):
+    """
+    Draw a 3x3 strike-zone grid on a PlateLocSide_norm vs PlateLocHeight scatter plot.
+    Catcher view: negative side = 3B side, positive = 1B side.
+    """
+    s_min, s_max = side_bounds
+    h_min, h_max = height_bounds
+
+    # Outer rectangle for the zone
+    fig.add_shape(
+        type="rect",
+        xref="x",
+        yref="y",
+        x0=s_min,
+        x1=s_max,
+        y0=h_min,
+        y1=h_max,
+        line=dict(color="#dddddd", width=2),
+        fillcolor="rgba(0,0,0,0)",
+        layer="below",
+    )
+
+    # Vertical cuts (left / middle / right)
+    for x_line in (-side_cut, side_cut):
+        fig.add_shape(
+            type="line",
+            xref="x",
+            yref="y",
+            x0=x_line,
+            x1=x_line,
+            y0=h_min,
+            y1=h_max,
+            line=dict(color="#aaaaaa", width=1, dash="solid"),
+            layer="below",
+        )
+
+    # Horizontal cuts (low / mid / high)
+    for y_line in (low_cut, high_cut):
+        fig.add_shape(
+            type="line",
+            xref="x",
+            yref="y",
+            x0=s_min,
+            x1=s_max,
+            y0=y_line,
+            y1=y_line,
+            line=dict(color="#aaaaaa", width=1, dash="solid"),
+            layer="below",
+        )
+
+    # Tight ranges around zone with a little padding
+    pad_x = 0.15
+    pad_y = 0.25
+    fig.update_xaxes(range=[s_min - pad_x, s_max + pad_x])
+    fig.update_yaxes(range=[h_min - pad_y, h_max + pad_y])
+
+    # Make the zone rectangular (no distortion)
+    fig.update_yaxes(scaleanchor="x", scaleratio=1)
+
+def make_hitter_bip_zone_figure(df: pd.DataFrame, batter_name: str) -> go.Figure:
+    """
+    Scatter of BIP filtered by EV/LA in the strike-zone plane, colored by pitch type.
+    """
+    hover_cols = [
+        c
+        for c in [
+            "PitchTypeDisplay",
+            "AutoPitchType",
+            "ExitSpeed",
+            "Angle",
+            "PlayResult",
+            "Date",
+            "CountStr",
+        ]
+        if c in df.columns
+    ]
+    color_col = "PitchTypeDisplay" if "PitchTypeDisplay" in df.columns else (
+        "AutoPitchType" if "AutoPitchType" in df.columns else None
+    )
+
+    fig = px.scatter(
+        df,
+        x="PlateLocSide_norm",
+        y="PlateLocHeight",
+        color=color_col,
+        color_discrete_map=PITCH_COLORS if color_col else None,
+        hover_data=hover_cols,
+        labels={
+            "PlateLocSide_norm": "Horizontal Location (catcher view: Left = 3B, Right = 1B)",
+            "PlateLocHeight": "Vertical Location (ft)",
+        },
+    )
+
+    # ---- make pitch markers larger with a white outline ----
+    fig.update_traces(
+        marker=dict(
+            size=14,
+            opacity=0.95,
+            line=dict(color="white", width=1.5),
+        )
+    )
+
+    add_zone_grid_to_fig(fig)
+    fig.update_layout(
+        title=f"{batter_name} — BIP EV/LA Filtered Zone View",
+        margin=dict(l=40, r=40, t=60, b=40),
+        legend_title_text="Pitch Type",
+    )
+    return fig
+
+
+def make_pitcher_count_zone_figure(df: pd.DataFrame, pitcher_name: str, count_label: str) -> go.Figure:
+    """
+    Scatter of pitch locations in the zone plane for a given count (or all),
+    colored by pitch type. Filled markers indicate pitches that resulted in hits.
+    """
+    # Flag pitches that resulted in hits
+    hit_vals = {"Single", "Double", "Triple", "HomeRun"}
+    if "PlayResult" in df.columns:
+        df = df.copy()
+        df["is_hit_pitch"] = df["PlayResult"].astype(str).isin(hit_vals)
+    else:
+        df = df.copy()
+        df["is_hit_pitch"] = False
+
+    hover_cols = [
+        c
+        for c in [
+            "PitchTypeDisplay",
+            "AutoPitchType",
+            "RelSpeed",
+            "PitchCall",
+            "PlayResult",
+            "Date",
+            "CountStr",
+            "is_hit_pitch",
+        ]
+        if c in df.columns
+    ]
+
+    color_col = "PitchTypeDisplay" if "PitchTypeDisplay" in df.columns else (
+        "AutoPitchType" if "AutoPitchType" in df.columns else None
+    )
+
+    title = f"{pitcher_name} — Pitch Locations by Count"
+    if count_label and count_label != "All":
+        title += f" (Count: {count_label})"
+
+    fig = px.scatter(
+        df,
+        x="PlateLocSide_norm",
+        y="PlateLocHeight",
+        color=color_col,
+        color_discrete_map=PITCH_COLORS if color_col else None,
+        symbol="is_hit_pitch",                      # True/False -> different marker shapes
+        symbol_map={True: "circle", False: "circle-open"},
+        hover_data=hover_cols,
+        labels={
+            "PlateLocSide_norm": "Horizontal Location (catcher view: Left = 3B, Right = 1B)",
+            "PlateLocHeight": "Vertical Location (ft)",
+            "is_hit_pitch": "Hit?",
+        },
+    )
+
+    # ---- bigger pitch markers with outline ----
+    fig.update_traces(
+        marker=dict(
+            size=14,
+            opacity=0.95,
+            line=dict(color="white", width=1.5),
+        )
+    )
+
+    add_zone_grid_to_fig(fig)
+    fig.update_layout(
+        title=title,
+        margin=dict(l=40, r=40, t=60, b=40),
+        legend_title_text="Pitch Type",
+    )
+    return fig
+
+
 # =========================================================
 # 2. HITTER SPRAY CHART HELPERS
 # =========================================================
@@ -735,8 +951,9 @@ if section == "Hitter Dashboard":
         batter = st.sidebar.selectbox("Batter", batters_all)
         s_all = df[df["Batter"] == batter].dropna(subset=["X_ft","Y_ft"]).copy()
 
-        tab_spray, tab_heat = st.tabs(["Spray Charts", "Zone Heat Map"])
+        tab_spray, tab_heat, tab_bip_zone = st.tabs(["Spray Charts", "Zone Heat Map", "BIP EV/LA Filter"])
 
+        # ---------- Spray tab ----------
         with tab_spray:
             # KPIs
             ev_avg = s_all["ExitSpeed"].mean()
@@ -765,6 +982,7 @@ if section == "Hitter Dashboard":
             show = [c for c in cols if c in s_all.columns]
             st.dataframe(s_all[show].sort_values("Date", ascending=False), use_container_width=True)
 
+        # ---------- Zone heatmap tab ----------
         with tab_heat:
             hitter_zones = team_hitter_zone_stats(team)
             if hitter_zones.empty:
@@ -774,8 +992,68 @@ if section == "Hitter Dashboard":
                     mat = get_hitter_zone_matrix(hitter_zones, batter)
                     fig_hz = make_zone_heatmap(mat, title=f"{batter} — Hitter Zone Score (0–100)")
                     st.plotly_chart(fig_hz, use_container_width=False)
+
+                    st.caption(
+                    "Calculated using xwOBA, xwOBAcon, exit velocity, launch angle, "
+                    "Hard-Hit%, Contact%, and Whiff% -- (0 worst - 100 best)"
+                    )
                 except ValueError as e:
                     st.info(str(e))
+
+        # ---------- NEW: BIP EV/LA filtered zone tab ----------
+        with tab_bip_zone:
+            plate_df = normalize_plate_coords(raw)
+            plate_df = add_swing_flags(plate_df)
+            plate_df = add_count_label(plate_df)
+            plate_df = standardize_pitch_type(plate_df)
+
+            sub_bip = plate_df[(plate_df["Batter"] == batter) & (plate_df["is_bip"])].copy()
+            if sub_bip.empty:
+                st.info("No balls in play with plate location data for this hitter.")
+            else:
+                ev_vals = sub_bip["ExitSpeed"].dropna()
+                la_vals = sub_bip["Angle"].dropna()
+                if ev_vals.empty or la_vals.empty:
+                    st.info("Missing Exit Velocity or Launch Angle data for this hitter.")
+                else:
+                    ev_min_possible = int(np.floor(ev_vals.min()))
+                    ev_max_possible = int(np.ceil(ev_vals.max()))
+                    default_ev = 90
+                    default_ev = max(ev_min_possible, min(default_ev, ev_max_possible))
+
+                    ev_min = st.slider(
+                        "Minimum Exit Velocity (mph)",
+                        ev_min_possible,
+                        ev_max_possible,
+                        value=default_ev,
+                    )
+
+                    la_min_possible = int(np.floor(la_vals.min()))
+                    la_max_possible = int(np.ceil(la_vals.max()))
+                    default_la_low = max(la_min_possible, -10)
+                    default_la_high = min(la_max_possible, 40)
+                    la_low, la_high = st.slider(
+                        "Launch Angle Range (°)",
+                        la_min_possible,
+                        la_max_possible,
+                        value=(default_la_low, default_la_high),
+                    )
+
+                    mask = (sub_bip["ExitSpeed"] >= ev_min) & sub_bip["Angle"].between(la_low, la_high)
+                    filtered = sub_bip[mask].copy()
+
+                    st.markdown(
+                        f"**Filtered BIP:** {len(filtered)} (of {len(sub_bip)} total with plate location)"
+                    )
+
+                    if filtered.empty:
+                        st.info("No balls in play match the current EV / LA filters.")
+                    else:
+                        fig_bip = make_hitter_bip_zone_figure(filtered, batter_name=batter)
+                        st.plotly_chart(fig_bip, use_container_width=False)
+                        st.caption(
+                            "Catcher view: negative horizontal = 3B side left, positive = 1B side right."
+                        )
 
     else:
         chosen = st.sidebar.multiselect(
@@ -820,10 +1098,16 @@ else:
 
     pitcher = st.sidebar.selectbox("Pitcher", pitchers)
 
-    tab_move, tab_heat_p = st.tabs(["Movement & Mix", "Zone Heat Map"])
+    # Prepped datasets for different pitcher tabs
+    dpp = prep_pitcher_df(rawp)
+    plate_p = normalize_plate_coords(rawp)
+    plate_p = add_count_label(plate_p)
+    plate_p = standardize_pitch_type(plate_p)
 
+    tab_move, tab_heat_p, tab_count = st.tabs(["Movement & Mix", "Zone Heat Map", "Count Zone Map"])
+
+    # ---------- Movement & mix ----------
     with tab_move:
-        dpp = prep_pitcher_df(rawp)
         sub = dpp[dpp["Pitcher"] == pitcher].copy()
         if sub.empty:
             st.info("No movement data for this pitcher.")
@@ -846,6 +1130,7 @@ else:
             st.subheader("Pitch Mix & Velo")
             st.dataframe(summary, use_container_width=True)
 
+    # ---------- Zone heatmap ----------
     with tab_heat_p:
         pitcher_zones = team_pitcher_zone_stats(team)
         if pitcher_zones.empty:
@@ -855,5 +1140,45 @@ else:
                 mat_p = get_pitcher_zone_matrix(pitcher_zones, pitcher)
                 fig_pz = make_zone_heatmap(mat_p, title=f"{pitcher} — Pitcher Zone Score (0–100)")
                 st.plotly_chart(fig_pz, use_container_width=False)
+
+                st.caption(
+                    "Calculated with xwOBA allowed, xwOBAcon allowed, EV allowed, Hard-Hit%(allowed), "
+                    "Allowed Launch Angle, CSW%, and Whiff% - (0 worst - 100 best)"
+)
+
             except ValueError as e:
                 st.info(str(e))
+
+    # ---------- NEW: Count-by-count zone scatter ----------
+    with tab_count:
+        subc = plate_p[plate_p["Pitcher"] == pitcher].dropna(
+            subset=["PlateLocHeight", "PlateLocSide_norm"]
+        ).copy()
+
+        if subc.empty:
+            st.info("No pitch location data for this pitcher.")
+        else:
+            if "CountStr" in subc.columns and subc["CountStr"].notna().any():
+                counts_avail = sorted(subc["CountStr"].dropna().unique().tolist())
+                options = ["All"] + counts_avail
+                default_index = 0
+                if "0-0" in counts_avail:
+                    default_index = options.index("0-0")
+                count_choice = st.selectbox("Count", options, index=default_index)
+
+                if count_choice != "All":
+                    subc = subc[subc["CountStr"] == count_choice].copy()
+            else:
+                count_choice = "All"
+                st.caption("No count data available; showing all pitches.")
+
+            st.markdown(f"**Pitches in selection:** {len(subc)}")
+
+            if subc.empty:
+                st.info("No pitches match the selected count.")
+            else:
+                fig_cnt = make_pitcher_count_zone_figure(subc, pitcher_name=pitcher, count_label=count_choice)
+                st.plotly_chart(fig_cnt, use_container_width=False)
+                st.caption(
+                    "Catcher view: negative horizontal = 3B side left, positive = 1B side right. SOLID ball signals a base hit"
+                )
