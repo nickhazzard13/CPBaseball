@@ -10,6 +10,140 @@ from PIL import Image
 
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Baseball Dashboard", layout="wide")
+
+st.markdown("""
+<style>
+/* Make EVERYTHING dark */
+html, body, .stApp {
+    background-color: #000000 !important;
+}
+
+/* Top header bar */
+header[data-testid="stHeader"],
+header[data-testid="stHeader"] > div {
+    background-color: #000000 !important;
+    box-shadow: none !important;
+}
+
+/* Remove the white band by also darkening main containers */
+.main, .block-container {
+    background-color: #000000 !important;
+    padding-top: 0.5rem !important;
+}
+
+/* === SIDEBAR: dark grey strip on the left === */
+
+/* Full-height sidebar column */
+section[data-testid="stSidebar"] {
+    background-color: #1e1e1e !important;   /* dark grey */
+}
+
+/* Inner sidebar content */
+section[data-testid="stSidebar"] > div:first-child {
+    background-color: #1e1e1e !important;   /* dark grey */
+    padding-top: 0.75rem !important;
+    padding-bottom: 1rem !important;
+    border-right: 1px solid #333333;       /* subtle divider line */
+}
+
+/* Sidebar text */
+section[data-testid="stSidebar"] * {
+    color: #FFFFFF !important;
+    font-size: 0.9rem;
+}
+
+/* Sidebar inputs (Team textbox, selectboxes, etc.) */
+section[data-testid="stSidebar"] input,
+section[data-testid="stSidebar"] textarea,
+section[data-testid="stSidebar"] select {
+    background-color: #2a2a2a !important;   /* slightly lighter than panel */
+    color: #FFFFFF !important;
+    border-radius: 6px !important;
+    border: 1px solid #444444 !important;
+}
+
+/* Sidebar radio + checkbox labels */
+section[data-testid="stSidebar"] label[data-baseweb="radio"],
+section[data-testid="stSidebar"] label[data-baseweb="checkbox"] {
+    color: #FFFFFF !important;
+}
+
+/* File uploader in sidebar */
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] div[data-baseweb="base-input"],
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] section {
+    background-color: #2a2a2a !important;
+    border-radius: 8px !important;
+    border: 1px dashed #444444 !important;
+}
+
+/* Buttons (Refresh, etc.) */
+.stButton>button {
+    border-radius: 999px !important;
+    border: 1px solid #FFE395 !important;
+    background-color: #111111 !important;
+    color: #FFE395 !important;
+}
+.stButton>button:hover {
+    background-color: #FFE395 !important;
+    color: #000000 !important;
+}
+
+/* Headings: gold */
+h1, h2, h3, h4, h5, h6,
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+.stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {
+    color: #FFE395 !important;
+}
+
+/* Tab bar accent */
+button[data-baseweb="tab"] {
+    color: #FFFFFF !important;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: #FFE395 !important;
+    border-bottom: 2px solid #FFE395 !important;
+}
+
+/* Metrics labels + values */
+[data-testid="stMetricLabel"] {
+    font-size: 0.8rem;
+    color: #CCCCCC !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.7rem;
+    font-weight: 600;
+    color: #FFFFFF !important;
+}
+.block-container {
+    padding-top: 2.5rem !important;
+}
+div[role="radiogroup"] > label {
+    color: #EEEEEE !important;
+    font-weight: 500 !important;
+}
+
+/* Lighten the text next to the bullet */
+div[role="radiogroup"] span {
+    color: #EEEEEE !important;
+}
+div[role="radiogroup"] label span {
+    color: #FFFFFF !important;
+}
+
+/* Make the radio circles also white when unselected */
+div[role="radiogroup"] input[type="radio"] {
+    accent-color: #FFFFFF !important;
+}
+div[role="radiogroup"] label > div:nth-child(2) {
+    color: #FFFFFF !important;
+}
+
+/* Also handle Streamlit’s internal span wrapper */
+div[role="radiogroup"] label span {
+    color: #FFFFFF !important;
+}
+</style>
+""", unsafe_allow_html=True)
 HERE = os.path.dirname(__file__)
 FIELD_IMAGE = os.path.join(HERE, "baseball.png")  # no longer required, kept for compatibility
 DATA_DIR = os.path.join(HERE, "data_25")
@@ -913,7 +1047,26 @@ def make_movement_figure(sub: pd.DataFrame, normalize_lhp: bool, throws_hand: st
 
     fig.update_layout(legend_title_text="Pitch", margin=dict(l=10,r=10,t=40,b=10))
     return fig
-
+# ==============GRAPH EDITING ===========================================
+def style_dark_plotly(fig: go.Figure) -> go.Figure:
+    """Apply a consistent dark style to Plotly figures."""
+    fig.update_layout(
+        paper_bgcolor="#000000",
+        plot_bgcolor="#000000",
+        font=dict(color="#F5F5F5"),
+        margin=dict(l=10, r=10, t=60, b=30),
+    )
+    fig.update_xaxes(
+        showgrid=True, gridcolor="#333333",
+        zeroline=False, linecolor="#666666", tickfont=dict(color="#DDDDDD"),
+        titlefont=dict(color="#DDDDDD"),
+    )
+    fig.update_yaxes(
+        showgrid=True, gridcolor="#333333",
+        zeroline=False, linecolor="#666666", tickfont=dict(color="#DDDDDD"),
+        titlefont=dict(color="#DDDDDD"),
+    )
+    return fig
 # =========================================================
 # 4. UI
 # =========================================================
