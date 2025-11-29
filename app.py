@@ -296,7 +296,30 @@ fig.update_layout(
     yaxis=dict(tickfont=dict(color="black"), titlefont=dict(color="black")),
 )
 st.plotly_chart(fig, use_container_width=True, theme=None)
+/* ======================================================= */
+/* MULTISELECT — Make selected batter names black */
+/* ======================================================= */
 
+/* Tag pill background (the selected items in the box) */
+[data-baseweb="tag"] {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+}
+
+/* Text inside the tag pill */
+[data-baseweb="tag"] span {
+    color: #000000 !important;
+}
+
+/* Remove any forced white text on pills */
+[data-baseweb="tag"] * {
+    color: #000000 !important;
+}
+
+/* The "x" remove button inside the tag */
+[data-baseweb="tag"] svg {
+    fill: #000000 !important;
+}
 </style>
 """
 
