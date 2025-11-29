@@ -1,0 +1,5 @@
+[theme]
+primaryColor = "#FFFFFF"            # slider / accent color
+backgroundColor = "#000000"
+secondaryBackgroundColor = "#1E1E1E"
+textColor = "#FFFFFF"

@@ -11,139 +11,297 @@ from PIL import Image
 # ---------------- CONFIG ----------------
 st.set_page_config(page_title="Baseball Dashboard", layout="wide")
 
-st.markdown("""
+DARK_THEME_CSS = """
 <style>
-/* Make EVERYTHING dark */
+
+/* ======================================================= */
+/* GLOBAL BACKGROUND + DEFAULT TEXT */
+/* ======================================================= */
 html, body, .stApp {
-    background-color: #000000 !important;
+    background-color: #000 !important;
+    color: #ffffff !important;
 }
 
-/* Top header bar */
+.main, .block-container {
+    background-color: #000 !important;
+}
+
+
+/* ======================================================= */
+/* HEADER */
+/* ======================================================= */
 header[data-testid="stHeader"],
 header[data-testid="stHeader"] > div {
-    background-color: #000000 !important;
+    background-color: #000 !important;
     box-shadow: none !important;
 }
 
-/* Remove the white band by also darkening main containers */
-.main, .block-container {
-    background-color: #000000 !important;
-    padding-top: 0.5rem !important;
-}
 
-/* === SIDEBAR: dark grey strip on the left === */
-
-/* Full-height sidebar column */
+/* ======================================================= */
+/* SIDEBAR */
+/* ======================================================= */
 section[data-testid="stSidebar"] {
-    background-color: #1e1e1e !important;   /* dark grey */
+    background-color: #1e1e1e !important;
+    border-right: 1px solid #333 !important;
 }
 
-/* Inner sidebar content */
-section[data-testid="stSidebar"] > div:first-child {
-    background-color: #1e1e1e !important;   /* dark grey */
-    padding-top: 0.75rem !important;
-    padding-bottom: 1rem !important;
-    border-right: 1px solid #333333;       /* subtle divider line */
-}
-
-/* Sidebar text */
 section[data-testid="stSidebar"] * {
-    color: #FFFFFF !important;
-    font-size: 0.9rem;
+    color: #ffffff !important;
 }
 
-/* Sidebar inputs (Team textbox, selectboxes, etc.) */
+/* Sidebar input styling */
 section[data-testid="stSidebar"] input,
 section[data-testid="stSidebar"] textarea,
 section[data-testid="stSidebar"] select {
-    background-color: #2a2a2a !important;   /* slightly lighter than panel */
-    color: #FFFFFF !important;
-    border-radius: 6px !important;
-    border: 1px solid #444444 !important;
-}
-
-/* Sidebar radio + checkbox labels */
-section[data-testid="stSidebar"] label[data-baseweb="radio"],
-section[data-testid="stSidebar"] label[data-baseweb="checkbox"] {
-    color: #FFFFFF !important;
-}
-
-/* File uploader in sidebar */
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] div[data-baseweb="base-input"],
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] section {
     background-color: #2a2a2a !important;
+    color: #ffffff !important;
     border-radius: 8px !important;
-    border: 1px dashed #444444 !important;
+    border: 1px solid #444 !important;
 }
 
-/* Buttons (Refresh, etc.) */
-.stButton>button {
+/* Sidebar file uploader container */
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] section,
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] div[data-baseweb="base-input"] {
+    background-color: #2a2a2a !important;
+    border: 1px dashed #555 !important;
+    border-radius: 10px !important;
+}
+
+/* File uploader button */
+[data-testid="stFileUploader"] button {
+    background-color: #333 !important;
+    color: #ffffff !important;
+    border: 1px solid #555 !important;
+    border-radius: 8px !important;
+}
+[data-testid="stFileUploader"] button:hover {
+    background-color: #555 !important;
+}
+
+
+/* ======================================================= */
+/* HEADINGS + LABELS + CAPTIONS */
+/* ======================================================= */
+h1, h2, h3, h4, h5, h6 {
+    color: #FFE395 !important; /* gold */
+}
+
+[data-testid="stWidgetLabel"] p {
+    color: #ffffff !important;
+}
+
+div[data-testid="stCaption"], 
+div[data-testid="stCaption"] *,
+.stCaption, .stCaption * {
+    color: #ffffff !important;
+}
+
+
+/* ======================================================= */
+/* BUTTONS */
+/* ======================================================= */
+.stButton > button {
     border-radius: 999px !important;
     border: 1px solid #FFE395 !important;
-    background-color: #111111 !important;
+    background-color: #111 !important;
     color: #FFE395 !important;
 }
-.stButton>button:hover {
+.stButton > button:hover {
     background-color: #FFE395 !important;
+    color: #000 !important;
+}
+
+
+/* ======================================================= */
+/* RADIO BUTTONS */
+/* ======================================================= */
+[data-baseweb="radio"] label,
+[data-baseweb="radio"] span,
+[data-baseweb="radio"] div {
+    color: #ffffff !important;
+}
+
+[data-baseweb="radio"] input[type="radio"] {
+    accent-color: #ffffff !important;
+}
+
+
+/* ======================================================= */
+/* SELECTBOX (Batter, Pitcher, etc.) */
+/* ======================================================= */
+
+/* Text inside selectbox becomes black on white */
+[data-baseweb="select"] input {
+    color: #000 !important;
+}
+
+/* Visible selectbox container */
+[data-baseweb="select"] div[role="button"] {
+    background-color: #ffffff !important;
     color: #000000 !important;
+    border-radius: 8px !important;
+    border: 1px solid #aaa !important;
 }
 
-/* Headings: gold */
-h1, h2, h3, h4, h5, h6,
-.stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
-.stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {
-    color: #FFE395 !important;
+/* Dropdown list */
+ul[role="listbox"] {
+    background-color: #1e1e1e !important;
+    color: #ffffff !important;
 }
 
-/* Tab bar accent */
-button[data-baseweb="tab"] {
-    color: #FFFFFF !important;
+ul[role="listbox"] li {
+    color: #ffffff !important;
 }
-button[data-baseweb="tab"][aria-selected="true"] {
-    color: #FFE395 !important;
-    border-bottom: 2px solid #FFE395 !important;
+ul[role="listbox"] li:hover {
+    background-color: #333 !important;
 }
 
-/* Metrics labels + values */
+
+/* ======================================================= */
+/* METRICS */
+/* ======================================================= */
 [data-testid="stMetricLabel"] {
-    font-size: 0.8rem;
-    color: #CCCCCC !important;
+    color: #cccccc !important;
 }
+
 [data-testid="stMetricValue"] {
-    font-size: 1.7rem;
-    font-weight: 600;
-    color: #FFFFFF !important;
-}
-.block-container {
-    padding-top: 2.5rem !important;
-}
-div[role="radiogroup"] > label {
-    color: #EEEEEE !important;
-    font-weight: 500 !important;
+    color: #ffffff !important;
 }
 
-/* Lighten the text next to the bullet */
-div[role="radiogroup"] span {
-    color: #EEEEEE !important;
+
+/* ======================================================= */
+/* TABLES */
+/* ======================================================= */
+.dataframe tbody tr,
+.dataframe thead tr,
+.dataframe td,
+.dataframe th {
+    color: #ffffff !important;
+    background-color: #000000 !important;
+    border-color: #333 !important;
 }
-div[role="radiogroup"] label span {
+
+
+/* ======================================================= */
+/* TABS — White text + Green underline */
+/* ======================================================= */
+button[data-baseweb="tab"] {
+    color: #ffffff !important;
+}
+
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: #ffffff !important;
+}
+
+div[data-baseweb="tab-highlight"] {
+    background-color: #154734 !important; /* dark green underline */
+}
+
+button[data-baseweb="tab"]:hover,
+button[data-baseweb="tab"]:focus {
+    color: #ffffff !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+
+/* ======================================================= */
+/* SLIDERS — ALL WHITE */
+/* ======================================================= */
+
+/* Active slider bar */
+[data-baseweb="slider"] [class*="track-"] {
+    background-color: #ffffff !important;
+}
+
+/* Slider thumb */
+[data-baseweb="slider"] [role="slider"] {
+    background-color: #ffffff !important;
+    border: 2px solid #ffffff !important;
+}
+
+/* Hover glow */
+[data-baseweb="slider"] [role="slider"]:hover {
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.35) !important;
+}
+
+/* Value bubble */
+[data-baseweb="slider"] [class*="value-"] {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #ffffff !important;
+}
+
+/* Slider labels */
+[data-baseweb="slider"] [class*="tick-"],
+[data-baseweb="slider"] [class*="mark-"] {
+    color: #ffffff !important;
+}
+
+
+/* ======================================================= */
+/* PLOTLY — Force white text */
+/* ======================================================= */
+
+/* ======================================================= */
+/* FINAL OVERRIDE — MAKE ALL SLIDER ACTIVE ELEMENTS WHITE */
+/* ======================================================= */
+
+/* Active filled track (the red bar) */
+[data-baseweb="slider"] div[role="slider"] ~ div {
+    background-color: #FFFFFF !important;
+}
+
+/* Alternate internal track class (covers all Streamlit versions) */
+[data-baseweb="slider"] [class*="track"] {
+    background-color: #FFFFFF !important;
+}
+
+/* Slider thumb */
+[data-baseweb="slider"] [role="slider"] {
+    background-color: #FFFFFF !important;
+    border: 2px solid #FFFFFF !important;
+}
+
+/* Value labels above each slider thumb (the red numbers like 90, -10, 40) */
+[data-baseweb="slider"] [class*="value"] {
     color: #FFFFFF !important;
 }
 
-/* Make the radio circles also white when unselected */
-div[role="radiogroup"] input[type="radio"] {
-    accent-color: #FFFFFF !important;
+/* If the label has a bubble background, make it black/white readable */
+[data-baseweb="slider"] [class*="value"] {
+    background-color: #000000 !important;
+    border: 1px solid #FFFFFF !important;
 }
-div[role="radiogroup"] label > div:nth-child(2) {
+
+/* Min/max tick labels */
+[data-baseweb="slider"] [class*="tick"],
+[data-baseweb="slider"] [class*="mark"] {
     color: #FFFFFF !important;
 }
 
-/* Also handle Streamlit’s internal span wrapper */
-div[role="radiogroup"] label span {
-    color: #FFFFFF !important;
+/* Hover glow on the thumb */
+[data-baseweb="slider"] [role="slider"]:hover {
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.35) !important;
 }
+/* ============================================= */
+/* PLOTLY — FORCE BLACK TEXT INSIDE GRAPHS */
+/* ============================================= */
+fig = make_field_diamond_figure(s_all, batter_name=batter)
+fig.update_layout(
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+    font=dict(color="black"),
+    xaxis=dict(tickfont=dict(color="black"), titlefont=dict(color="black")),
+    yaxis=dict(tickfont=dict(color="black"), titlefont=dict(color="black")),
+)
+st.plotly_chart(fig, use_container_width=True, theme=None)
+
 </style>
-""", unsafe_allow_html=True)
+"""
+
+st.markdown(DARK_THEME_CSS, unsafe_allow_html=True)
+
 HERE = os.path.dirname(__file__)
 FIELD_IMAGE = os.path.join(HERE, "baseball.png")  # no longer required, kept for compatibility
 DATA_DIR = os.path.join(HERE, "data_25")
@@ -511,18 +669,12 @@ def team_pitcher_zone_stats(team: str) -> pd.DataFrame:
     return compute_pitcher_zone_stats(df)
 
 def make_zone_heatmap(mat: pd.DataFrame, title: str) -> go.Figure:
-    """
-    Build a 3x3 heatmap like the MLB zone graphic.
-    """
     z = mat.to_numpy(dtype=float)
-    # Flip vertically so row 2 plots at top
     z_plot = z[::-1, :]
 
-    # Labels
     x_labels = ["Left", "Middle", "Right"]
     y_labels = ["High", "Middle", "Low"]
 
-    # Text labels in cells
     text_vals = np.round(z_plot, 1)
     text = np.where(np.isnan(text_vals), "", text_vals.astype(str))
 
@@ -542,20 +694,34 @@ def make_zone_heatmap(mat: pd.DataFrame, title: str) -> go.Figure:
     fig.update_traces(
         text=text,
         texttemplate="%{text}",
-        textfont=dict(color="white", size=16)
+        textfont=dict(color="white", size=16),   # <-- white numbers in cells
     )
 
     fig.update_layout(
         title=title,
-        xaxis=dict(title="Horizontal Location (catcher view: Left = 3B, Right = 1B)"),
-        yaxis=dict(title="Vertical Location"),
+        xaxis=dict(
+            title="Horizontal Location (catcher view: Left = 3B, Right = 1B)",
+            tickfont=dict(color="white"),
+            titlefont=dict(color="white"),
+        ),
+        yaxis=dict(
+            title="Vertical Location",
+            tickfont=dict(color="white"),
+            titlefont=dict(color="white"),
+        ),
         margin=dict(l=40, r=40, t=60, b=40),
         plot_bgcolor="black",
         paper_bgcolor="black",
-        font=dict(color="white"),
+        font=dict(color="white"),  # legend/title default
     )
-    return fig
 
+    # make colorbar text white too
+    fig.update_coloraxes(colorbar=dict(
+        tickfont=dict(color="white"),
+        titlefont=dict(color="white"),
+    ))
+
+    return fig
 # ------- NEW: shared helpers for pitch types, count labels, and zone scatter -------
 
 def standardize_pitch_type(df: pd.DataFrame,
@@ -1283,7 +1449,9 @@ else:
             st.subheader("Pitch Mix & Velo")
             st.dataframe(summary, use_container_width=True)
 
-    # ---------- Zone heatmap ----------
+    # ---------- Zone heatmap ----------fig_hz =
+ 
+   
     with tab_heat_p:
         pitcher_zones = team_pitcher_zone_stats(team)
         if pitcher_zones.empty:
