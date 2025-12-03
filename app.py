@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from PIL import Image
 
 # ---------------- CONFIG ----------------
-st.set_page_config(page_title="Baseball Dashboard", layout="wide")
+st.set_page_config(page_title="Cal Poly SLO Baseball Dashboard", layout="wide")
 
 DARK_THEME_CSS = """
 <style>
@@ -1260,7 +1260,7 @@ def style_dark_plotly(fig: go.Figure) -> go.Figure:
 # 4. UI
 # =========================================================
 
-st.title("Baseball Dashboard")
+st.title("Cal Poly SLO Baseball Dashboard")
 team = st.sidebar.text_input("Team", TEAM_DEFAULT)
 section = st.sidebar.radio("Section", ["Hitter Dashboard", "Pitcher Dashboard"])
 
